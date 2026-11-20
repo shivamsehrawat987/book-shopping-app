@@ -1,0 +1,30 @@
+[
+  {
+    "title": "The Checkout Book",
+    "author": "Demo Author",
+    "price": 299.00,
+    "stockQuantity": 8,
+    "category": "FICTION"
+  },
+  {
+    "title": "Practical Spring",
+    "author": "Sample Developer",
+    "price": 799.00,
+    "stockQuantity": 5,
+    "category": "TECHNOLOGY"
+  },
+  {
+    "title": "Science for Everyone",
+    "author": "A. Example",
+    "price": 450.00,
+    "stockQuantity": 3,
+    "category": "SCIENCE"
+  },
+  {
+    "title": "Stories from History",
+    "author": "R. Reader",
+    "price": 350.00,
+    "stockQuantity": 0,
+    "category": "BIOGRAPHY"
+  }
+]

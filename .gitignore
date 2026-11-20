@@ -1,0 +1,63 @@
+HELP.md
+target/
+/config/application-secrets.properties
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+# Persistent local installation diagnostics
+/.ai-sdlc/install-logs/
+
+# APM installer staging
+/.apm-dist/
+
+# APM private Python dependencies
+/.apm/runtime/python-deps/
+
+# Repo-graph local index
+/.mygraph/
+outputs/brownfield/*/knowledge-plane/
+
+# --- APM runtime artifacts (auto-added by install-apm-bundle) ---
+__pycache__/
+*.pyc
+outputs/knowledge-plane/
+outputs/runs/_interactive/
+.state-backups/
+.apm-install-tmp-*/
+.apm-bootstrap-tmp/
+# --- end APM runtime artifacts ---
+tools/repo-graph/
+
+# Local tooling configuration
+.apm.lock.yaml
+.backbone-settings.json
+hook-config.json

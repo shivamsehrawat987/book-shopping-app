@@ -3,6 +3,7 @@ package com.bookstore.book_shopping_app;
 
 import com.bookstore.book_shopping_app.entity.Book;
 import com.bookstore.book_shopping_app.entity.Cart;
+import com.bookstore.book_shopping_app.entity.CartItem;
 import com.bookstore.book_shopping_app.entity.PaymentAttempt;
 import com.bookstore.book_shopping_app.entity.User;
 import com.bookstore.book_shopping_app.enums.BookCategory;
@@ -16,6 +17,8 @@ import com.bookstore.book_shopping_app.repository.OrderRepository;
 import com.bookstore.book_shopping_app.repository.PaymentAttemptRepository;
 import com.bookstore.book_shopping_app.repository.ProcessedPaymentEventRepository;
 import com.bookstore.book_shopping_app.repository.UserRepository;
+import com.bookstore.book_shopping_app.service.PaymentService;
+import com.bookstore.book_shopping_app.service.PendingOrderExpiryJob;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +40,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
@@ -68,6 +76,8 @@ class PaymentIntegrationTests {
     @Autowired private UserRepository users;
     @Autowired private PaymentAttemptRepository paymentAttempts;
     @Autowired private ProcessedPaymentEventRepository processedEvents;
+    @Autowired private PaymentService payments;
+    @Autowired private PendingOrderExpiryJob expiryJob;
     @Autowired private PasswordEncoder passwordEncoder;
 
     @MockitoBean private Clock clock;
@@ -102,8 +112,12 @@ class PaymentIntegrationTests {
                 BookCategory.FICTION
         ));
 
-        cart = carts.saveAndFlush(new Cart(customer));
-        cart.addItem(book, 2);
+        cart = carts.saveAndFlush(Cart.builder().user(customer).build());
+        cart.getItems().add(CartItem.builder()
+                .cart(cart)
+                .book(book)
+                .quantity(2)
+                .build());
         cart = carts.saveAndFlush(cart);
     }
 
@@ -130,6 +144,146 @@ class PaymentIntegrationTests {
         );
 
         assertTrue(processedEvents.existsByEventId("event-success-1"));
+    }
+
+    @Test
+    void lateSuccessWebhookAfterExpiryRequiresReconciliationAndDoesNotConsumeReleasedStock()
+            throws Exception {
+
+        PaymentAttempt attempt = initiatePayment(PaymentMethod.PAYTM);
+        Long orderId = attempt.getOrder().getId();
+
+        // Expire the reservation: checkout reserved 2 of the original 5 books.
+        var order = orders.findById(orderId).orElseThrow();
+        order.setExpiresAt(java.time.LocalDateTime.now(clock).minusMinutes(1));
+        orders.saveAndFlush(order);
+        payments.expireOrder(orderId);
+
+        assertEquals(OrderStatus.EXPIRED, orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(5, books.findById(book.getId()).orElseThrow().getStockQuantity());
+
+        String body = json.writeValueAsString(successEvent(attempt, "event-late-success"));
+        postWebhook(body, sign(body), 200);
+
+        assertEquals(PaymentStatus.SUCCEEDED,
+                paymentAttempts.findByPaymentIntentId(attempt.getPaymentIntentId())
+                        .orElseThrow().getStatus());
+        assertEquals(OrderStatus.REQUIRES_RECONCILIATION,
+                orders.findById(orderId).orElseThrow().getStatus());
+
+        // The late payment must not silently consume stock that was released to other orders.
+        assertEquals(5, books.findById(book.getId()).orElseThrow().getStockQuantity());
+        assertTrue(processedEvents.existsByEventId("event-late-success"));
+    }
+
+    @Test
+    void expiryAndLateSuccessWebhookRaceReleasesStockOnlyOnce() throws Exception {
+
+        PaymentAttempt attempt = initiatePayment(PaymentMethod.PAYTM);
+        Long orderId = attempt.getOrder().getId();
+
+        var order = orders.findById(orderId).orElseThrow();
+        order.setExpiresAt(java.time.LocalDateTime.now(clock).minusMinutes(1));
+        orders.saveAndFlush(order);
+
+        String body = json.writeValueAsString(
+                successEvent(attempt, "event-expiry-webhook-race"));
+        String signature = sign(body);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<?> expiry = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Race did not start in time");
+                }
+                payments.expireOrder(orderId);
+                return null;
+            });
+
+            Future<?> webhook = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Race did not start in time");
+                }
+                postWebhook(body, signature, 200);
+                return null;
+            });
+
+            assertTrue(ready.await(5, TimeUnit.SECONDS),
+                    "Both concurrent operations should be ready");
+            start.countDown();
+            expiry.get(15, TimeUnit.SECONDS);
+            webhook.get(15, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(OrderStatus.REQUIRES_RECONCILIATION,
+                orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.SUCCEEDED,
+                paymentAttempts.findByPaymentIntentId(attempt.getPaymentIntentId())
+                        .orElseThrow().getStatus());
+        assertEquals(5, books.findById(book.getId()).orElseThrow().getStockQuantity(),
+                "The reservation must be released exactly once");
+        assertTrue(processedEvents.existsByEventId("event-expiry-webhook-race"));
+    }
+
+    @Test
+    void failedWebhookMarksPaymentAttemptFailedAndKeepsOrderPending() throws Exception {
+
+        PaymentAttempt attempt = initiatePayment(PaymentMethod.PAYTM);
+        Long orderId = attempt.getOrder().getId();
+
+        MockPaymentEvent event = new MockPaymentEvent(
+                "event-payment-failed",
+                "payment_intent.payment_failed",
+                attempt.getPaymentIntentId(),
+                attempt.getAmount().movePointRight(2).longValueExact(),
+                attempt.getCurrency(),
+                null,
+                "Card was declined"
+        );
+        String body = json.writeValueAsString(event);
+
+        postWebhook(body, sign(body), 200);
+
+        assertEquals(PaymentStatus.FAILED,
+                paymentAttempts.findByPaymentIntentId(attempt.getPaymentIntentId())
+                        .orElseThrow().getStatus());
+        assertEquals(OrderStatus.PENDING,
+                orders.findById(orderId).orElseThrow().getStatus());
+
+        // A failed attempt does not expire the checkout reservation.
+        assertEquals(3, books.findById(book.getId()).orElseThrow().getStockQuantity());
+        assertTrue(processedEvents.existsByEventId("event-payment-failed"));
+    }
+
+    @Test
+    void expiryJobExpiresPendingOrderAndRestoresStockOnlyOnce() throws Exception {
+
+        PaymentAttempt attempt = initiatePayment(PaymentMethod.PAYTM);
+        Long orderId = attempt.getOrder().getId();
+
+        var order = orders.findById(orderId).orElseThrow();
+        order.setExpiresAt(java.time.LocalDateTime.now(clock).minusMinutes(1));
+        orders.saveAndFlush(order);
+
+        expiryJob.expirePendingOrders();
+
+        assertEquals(OrderStatus.EXPIRED,
+                orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.EXPIRED,
+                paymentAttempts.findByPaymentIntentId(attempt.getPaymentIntentId())
+                        .orElseThrow().getStatus());
+        assertEquals(5, books.findById(book.getId()).orElseThrow().getStockQuantity());
+
+        // A subsequent scan must not release the same reservation again.
+        expiryJob.expirePendingOrders();
+        assertEquals(5, books.findById(book.getId()).orElseThrow().getStockQuantity());
     }
 
     @Test

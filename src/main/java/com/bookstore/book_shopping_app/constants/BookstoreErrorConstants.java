@@ -55,5 +55,7 @@ public final class BookstoreErrorConstants {
     public static final String PAYMENT_ALREADY_INITIATED = "PAYMENT_ALREADY_INITIATED";
     public static final String PAYMENT_PROVIDER_NOT_SUPPORTED = "PAYMENT_PROVIDER_NOT_SUPPORTED";
     public static final String INVALID_PAYMENT_GATEWAY_RESPONSE = "INVALID_PAYMENT_GATEWAY_RESPONSE";
-
+    public static final String BOOK_INACTIVE = "BOOK_INACTIVE";
+    public static final String BOOK_VERSION_CONFLICT = "BOOK_VERSION_CONFLICT";
+    public static final String INVALID_STOCK_ADJUSTMENT = "INVALID_STOCK_ADJUSTMENT";
 }

@@ -141,4 +141,13 @@ public final class BookstoreMessageConstants {
 
     public static final String PAYMENT_ONLY_FOR_PENDING_ORDER_MESSAGE =
             "Payment can only be initiated for a pending order";
+
+    public static final String BOOK_INACTIVE_MESSAGE =
+            "This book is no longer available.";
+
+    public static final String BOOK_VERSION_CONFLICT_MESSAGE =
+            "This book was updated by another request. Refresh and try again.";
+
+    public static final String INVALID_STOCK_ADJUSTMENT_MESSAGE =
+            "The requested stock adjustment is invalid.";
 }

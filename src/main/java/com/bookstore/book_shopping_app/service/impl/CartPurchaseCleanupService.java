@@ -44,9 +44,10 @@ public class CartPurchaseCleanupService {
                                 cartItem.getQuantity() - orderItem.getQuantity();
 
                         if (remainingQuantity <= 0) {
-                            cart.removeItem(cartItem);
+                            cart.getItems().remove(cartItem);
+                            cartItem.setCart(null);
                         } else {
-                            cartItem.updateQuantity(remainingQuantity);
+                            cartItem.setQuantity(remainingQuantity);
                         }
                     });
         });

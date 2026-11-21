@@ -100,8 +100,8 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.pagination.size", is(1)))
                 .andExpect(jsonPath("$.pagination.totalElements", is(1)))
                 .andExpect(jsonPath("$.pagination.totalPages", is(1)))
-                .andExpect(jsonPath("$.pagination.hasNext", is(false)))
-                .andExpect(jsonPath("$.data[0].version").doesNotExist());
+                .andExpect(jsonPath("$.pagination.hasNext", is(false)));
+
     }
 
     @Test
@@ -157,7 +157,7 @@ class ApiIntegrationTests {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.title", is("The Test Book")))
                 .andExpect(jsonPath("$.category", is("FICTION")))
-                .andExpect(jsonPath("$.version").doesNotExist());
+                .andExpect(jsonPath("$.version").value(0));
     }
 
     @Test

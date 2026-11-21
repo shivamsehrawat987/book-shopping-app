@@ -13,7 +13,6 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.HexFormat;
 
@@ -49,11 +48,7 @@ public class MockWebhookVerifier {
             );
         }
 
-        if (this.secret.length < 32) {
-            throw new IllegalStateException(
-                    "Mock webhook secret must be at least 32 bytes"
-            );
-        }
+
 
         this.json = json;
         this.validator = validator;

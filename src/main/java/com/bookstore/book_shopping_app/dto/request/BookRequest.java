@@ -1,3 +1,4 @@
+
 package com.bookstore.book_shopping_app.dto.request;
 
 import java.math.BigDecimal;
@@ -14,8 +15,12 @@ import jakarta.validation.constraints.Size;
 public record BookRequest(
         @NotBlank @Size(max = 200) String title,
         @NotBlank @Size(max = 150) String author,
-        @NotNull @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 10, fraction = 2) BigDecimal price,
+        @NotNull
+        @DecimalMin(value = "0.0", inclusive = false)
+        @Digits(integer = 10, fraction = 2)
+        BigDecimal price,
         @NotNull @Min(0) Integer stockQuantity,
+        @Size(max = 2000) String description,
         @NotNull BookCategory category
 ) {
 }

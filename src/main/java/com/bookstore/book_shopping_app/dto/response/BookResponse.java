@@ -1,3 +1,4 @@
+
 package com.bookstore.book_shopping_app.dto.response;
 
 import java.math.BigDecimal;
@@ -11,6 +12,8 @@ public record BookResponse(
         BigDecimal price,
         Integer stockQuantity,
         String description,
-        BookCategory category
+        BookCategory category,
+        boolean active,
+        Long version
 ) {
 }

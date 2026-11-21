@@ -57,7 +57,10 @@ public class ApiExceptionHandler {
                  BookstoreErrorConstants.PAYMENT_CONFLICT ->
                     HttpStatus.CONFLICT;
 
-            case BookstoreErrorConstants.CART_EMPTY,
+            case BookstoreErrorConstants.BOOK_INACTIVE,
+                 BookstoreErrorConstants.BOOK_VERSION_CONFLICT,
+                 BookstoreErrorConstants.INVALID_STOCK_ADJUSTMENT,
+                 BookstoreErrorConstants.CART_EMPTY,
                  BookstoreErrorConstants.INVALID_IDEMPOTENCY_KEY,
                  BookstoreErrorConstants.INVALID_WEBHOOK ->
                     HttpStatus.BAD_REQUEST;
@@ -224,5 +227,15 @@ public class ApiExceptionHandler {
                         BookstoreErrorConstants.INTERNAL_ERROR,
                         BookstoreMessageConstants.INTERNAL_ERROR_MESSAGE
                 ));
+    }
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail handleOptimisticLockConflict(
+            org.springframework.orm.ObjectOptimisticLockingFailureException exception
+    ) {
+        return problems.create(
+                HttpStatus.CONFLICT,
+                BookstoreErrorConstants.BOOK_VERSION_CONFLICT,
+                BookstoreMessageConstants.BOOK_VERSION_CONFLICT_MESSAGE
+        );
     }
 }

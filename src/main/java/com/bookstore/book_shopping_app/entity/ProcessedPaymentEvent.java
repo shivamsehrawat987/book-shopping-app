@@ -16,7 +16,10 @@ import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
 
 @Entity
@@ -24,7 +27,10 @@ import lombok.NoArgsConstructor;
         @UniqueConstraint(name = "uk_processed_payment_event_id", columnNames = "event_id")
 })
 @Getter
+@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class ProcessedPaymentEvent {
 
     @Id
@@ -51,18 +57,4 @@ public class ProcessedPaymentEvent {
     @NotNull
     @Column(name = "processed_at", nullable = false, updatable = false)
     private LocalDateTime processedAt;
-
-    public ProcessedPaymentEvent(String eventId, PaymentEventType eventType,
-                                 String paymentIntentId, String payloadHash) {
-        if (eventId == null || eventId.isBlank() || eventType == null
-                || paymentIntentId == null || paymentIntentId.isBlank()
-                || payloadHash == null || !payloadHash.matches("[a-fA-F0-9]{64}")) {
-            throw new IllegalArgumentException("Valid event ID, event type, payment intent ID and SHA-256 payload hash are required");
-        }
-        this.eventId = eventId;
-        this.eventType = eventType;
-        this.paymentIntentId = paymentIntentId;
-        this.payloadHash = payloadHash.toLowerCase();
-        this.processedAt = LocalDateTime.now();
-    }
 }

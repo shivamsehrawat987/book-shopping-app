@@ -20,6 +20,7 @@ import com.bookstore.book_shopping_app.repository.OrderRepository;
 import com.bookstore.book_shopping_app.repository.UserRepository;
 import com.bookstore.book_shopping_app.service.CartService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CartServiceImpl implements CartService {
 
     private final CartRepository carts;
@@ -56,7 +58,9 @@ public class CartServiceImpl implements CartService {
 
         validateAvailableStock(cart, book, request.quantity());
 
-        cart.addItem(book, request.quantity());
+        addOrIncreaseCartItem(cart, book, request.quantity());
+        log.info("Cart item added: cartId={}, bookId={}, quantity={}",
+                cart.getId(), book.getId(), request.quantity());
 
         carts.flush();
 
@@ -78,7 +82,9 @@ public class CartServiceImpl implements CartService {
 
         validateUpdatedQuantity(item, request.quantity());
 
-        item.updateQuantity(request.quantity());
+        item.setQuantity(request.quantity());
+        log.info("Cart item quantity updated: cartId={}, cartItemId={}, quantity={}",
+                cart.getId(), item.getId(), request.quantity());
 
         return mapper.toResponse(cart);
     }
@@ -93,7 +99,9 @@ public class CartServiceImpl implements CartService {
 
         CartItem item = findCartItem(cart, itemId);
 
-        cart.removeItem(item);
+        cart.getItems().remove(item);
+        item.setCart(null);
+        log.info("Cart item removed: cartId={}, cartItemId={}", cart.getId(), itemId);
 
         return mapper.toResponse(cart);
     }
@@ -106,9 +114,27 @@ public class CartServiceImpl implements CartService {
 
         ensureCartCanBeModified(cart.getId());
 
-        cart.clearItems();
+        int removedItemCount = cart.getItems().size();
+        cart.getItems().forEach(item -> item.setCart(null));
+        cart.getItems().clear();
+        log.info("Cart cleared: cartId={}, removedItemCount={}", cart.getId(), removedItemCount);
 
         return mapper.toResponse(cart);
+    }
+
+    private void addOrIncreaseCartItem(Cart cart, Book book, int quantity) {
+
+        cart.getItems().stream()
+                .filter(item -> Objects.equals(item.getBook().getId(), book.getId()))
+                .findFirst()
+                .ifPresentOrElse(
+                        existingItem -> existingItem.setQuantity(existingItem.getQuantity() + quantity),
+                        () -> cart.getItems().add(CartItem.builder()
+                                .cart(cart)
+                                .book(book)
+                                .quantity(quantity)
+                                .build())
+                );
     }
 
     private CartResponse createCart(String email) {
@@ -120,7 +146,7 @@ public class CartServiceImpl implements CartService {
                 ));
 
         Cart cart = carts.findByUserEmailIgnoreCase(email)
-                .orElseGet(() -> carts.save(new Cart(user)));
+                .orElseGet(() -> carts.save(Cart.builder().user(user).build()));
 
         return mapper.toResponse(cart);
     }
@@ -145,7 +171,7 @@ public class CartServiceImpl implements CartService {
                 ));
 
         Cart cart = carts.findByUserEmailIgnoreCase(email)
-                .orElseGet(() -> carts.saveAndFlush(new Cart(user)));
+                .orElseGet(() -> carts.saveAndFlush(Cart.builder().user(user).build()));
 
         return carts.findLockedByUserEmail(email)
                 .orElseThrow(() -> new CartException(

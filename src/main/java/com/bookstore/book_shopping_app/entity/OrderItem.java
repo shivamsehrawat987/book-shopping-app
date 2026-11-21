@@ -17,13 +17,19 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "order_items")
 @Getter
+@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class OrderItem {
 
     @Id
@@ -54,19 +60,4 @@ public class OrderItem {
     @DecimalMin(value = "0.0", inclusive = false)
     @Column(name = "price_at_purchase", nullable = false, precision = 12, scale = 2)
     private BigDecimal priceAtPurchase;
-
-    OrderItem(Order order, Book book, Integer quantity) {
-        if (order == null || book == null || quantity == null || quantity <= 0) {
-            throw new IllegalArgumentException("Order, book, and positive quantity are required");
-        }
-        if (book.getTitle() == null || book.getTitle().isBlank()
-                || book.getPrice() == null || book.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Book must have a title and positive price");
-        }
-        this.order = order;
-        this.book = book;
-        this.bookTitleAtPurchase = book.getTitle();
-        this.quantity = quantity;
-        this.priceAtPurchase = book.getPrice();
-    }
 }

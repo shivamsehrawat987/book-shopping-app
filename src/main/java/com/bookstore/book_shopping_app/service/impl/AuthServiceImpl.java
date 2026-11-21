@@ -15,12 +15,14 @@ import com.bookstore.book_shopping_app.mapper.UserMapper;
 import com.bookstore.book_shopping_app.repository.UserRepository;
 import com.bookstore.book_shopping_app.service.AuthService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository users;
@@ -44,14 +46,19 @@ public class AuthServiceImpl implements AuthService {
         if (users.existsByEmailIgnoreCase(email)) {
             throw new AuthException(BookstoreErrorConstants.ACCOUNT_ALREADY_EXISTS, "An account with this email already exists");
         }
-        return mapper.toResponse(users.save(mapper.toEntity(request, passwordEncoder.encode(request.password()), role)));
+        UserResponse response = mapper.toResponse(users.save(
+                mapper.toEntity(request, passwordEncoder.encode(request.password()), role)));
+        log.info("User account created: userId={}, role={}", response.id(), role);
+        return response;
     }
 
     @Override
     @Transactional(readOnly = true)
     public UserResponse currentUser(String email) {
-        return users.findByEmailIgnoreCase(email)
+        UserResponse response = users.findByEmailIgnoreCase(email)
                 .map(mapper::toResponse)
                 .orElseThrow(() -> new AuthException(BookstoreErrorConstants.INVALID_CREDENTIALS, "Invalid credentials"));
+        log.info("User profile retrieved: userId={}", response.id());
+        return response;
     }
 }

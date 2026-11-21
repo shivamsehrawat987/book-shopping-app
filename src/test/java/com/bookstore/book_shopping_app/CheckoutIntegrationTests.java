@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 
 import com.bookstore.book_shopping_app.entity.Book;
 import com.bookstore.book_shopping_app.entity.Cart;
+import com.bookstore.book_shopping_app.entity.CartItem;
 import com.bookstore.book_shopping_app.entity.User;
 import com.bookstore.book_shopping_app.enums.BookCategory;
 import com.bookstore.book_shopping_app.enums.OrderStatus;
@@ -117,8 +118,8 @@ class CheckoutIntegrationTests {
                 )
         );
 
-        cart = new Cart(user);
-        cart.addItem(book, 2);
+        cart = Cart.builder().user(user).build();
+        addCartItem(cart, book, 2);
 
         carts.saveAndFlush(cart);
     }
@@ -213,10 +214,10 @@ class CheckoutIntegrationTests {
     void checkoutRejectsEmptyCart() throws Exception {
 
         Cart emptyCart = carts.saveAndFlush(
-                new Cart(
-                        users.findByEmailIgnoreCase("other@example.test")
-                                .orElseThrow()
-                )
+                Cart.builder()
+                        .user(users.findByEmailIgnoreCase("other@example.test")
+                                .orElseThrow())
+                        .build()
         );
 
         mvc.perform(
@@ -342,12 +343,12 @@ class CheckoutIntegrationTests {
         book.updateStock(2);
         books.saveAndFlush(book);
 
-        Cart secondCart = new Cart(
-                users.findByEmailIgnoreCase("other@example.test")
-                        .orElseThrow()
-        );
+        Cart secondCart = Cart.builder()
+                .user(users.findByEmailIgnoreCase("other@example.test")
+                        .orElseThrow())
+                .build();
 
-        secondCart.addItem(book, 2);
+        addCartItem(secondCart, book, 2);
         carts.saveAndFlush(secondCart);
 
         CountDownLatch start = new CountDownLatch(1);
@@ -410,13 +411,13 @@ class CheckoutIntegrationTests {
 
         carts.deleteAll();
 
-        Cart replacement = new Cart(
-                users.findByEmailIgnoreCase("reader@example.test")
-                        .orElseThrow()
-        );
+        Cart replacement = Cart.builder()
+                .user(users.findByEmailIgnoreCase("reader@example.test")
+                        .orElseThrow())
+                .build();
 
-        replacement.addItem(book, 2);
-        replacement.addItem(unavailable, 1);
+        addCartItem(replacement, book, 2);
+        addCartItem(replacement, unavailable, 1);
 
         carts.saveAndFlush(replacement);
 
@@ -528,5 +529,13 @@ class CheckoutIntegrationTests {
                 .andReturn()
                 .getResponse()
                 .getStatus();
+    }
+
+    private void addCartItem(Cart cart, Book book, int quantity) {
+        cart.getItems().add(CartItem.builder()
+                .cart(cart)
+                .book(book)
+                .quantity(quantity)
+                .build());
     }
 }

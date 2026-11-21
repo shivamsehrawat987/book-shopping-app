@@ -5,11 +5,13 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import com.bookstore.book_shopping_app.constants.BookstoreErrorConstants;
 import com.bookstore.book_shopping_app.constants.BookstoreMessageConstants;
-import com.bookstore.book_shopping_app.dto.response.CheckoutRequest;
+import com.bookstore.book_shopping_app.dto.request.CheckoutRequest;
 import com.bookstore.book_shopping_app.dto.response.CheckoutResponse;
 import com.bookstore.book_shopping_app.dto.response.OrderResponse;
 import com.bookstore.book_shopping_app.entity.Book;
@@ -23,14 +25,17 @@ import com.bookstore.book_shopping_app.mapper.OrderMapper;
 import com.bookstore.book_shopping_app.repository.BookRepository;
 import com.bookstore.book_shopping_app.repository.CartRepository;
 import com.bookstore.book_shopping_app.repository.OrderRepository;
+import com.bookstore.book_shopping_app.service.OrderFactory;
 import com.bookstore.book_shopping_app.service.OrderService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderServiceImpl implements OrderService {
 
     private static final BigDecimal MAX_ORDER_TOTAL =
@@ -42,6 +47,7 @@ public class OrderServiceImpl implements OrderService {
     private final BookRepository books;
     private final OrderRepository orders;
     private final OrderMapper mapper;
+    private final OrderFactory orderFactory;
     private final Clock clock;
 
     @Override
@@ -63,6 +69,8 @@ public class OrderServiceImpl implements OrderService {
         );
 
         if (retry.isPresent()) {
+            log.info("Returning idempotent checkout response for userId={}, cartId={}",
+                    cart.getUser().getId(), cart.getId());
             return retry.get();
         }
 
@@ -71,6 +79,9 @@ public class OrderServiceImpl implements OrderService {
         Order order = createOrder(cart, idempotencyKey, request);
 
         orders.saveAndFlush(order);
+        log.info("Checkout created: orderId={}, userId={}, cartId={}, itemCount={}, totalAmount={}",
+                order.getId(), cart.getUser().getId(), cart.getId(),
+                order.getItems().size(), order.getTotalAmount());
 
         return response(order);
     }
@@ -176,49 +187,36 @@ public class OrderServiceImpl implements OrderService {
             CheckoutRequest request) {
 
         LocalDateTime now = LocalDateTime.now(clock);
+        Map<Long, Book> reservedBooks = reserveCartItems(cart);
 
-        Order order = new Order(
-                cart.getUser(),
-                request.shippingAddress().trim()
-        );
-
-        order.prepareCheckout(
-                cart.getId(),
+        Order order = orderFactory.createFrom(
+                cart,
+                reservedBooks,
                 idempotencyKey,
+                request.shippingAddress(),
                 now.plusMinutes(RESERVATION_MINUTES)
         );
 
-        reserveCartItems(order, cart);
-
         validateOrderTotal(order.getTotalAmount());
-
         return order;
     }
 
-    private void reserveCartItems(Order order, Cart cart) {
+    /** Locks books in ascending ID order and reserves stock within this transaction. */
+    private Map<Long, Book> reserveCartItems(Cart cart) {
 
         var items = cart.getItems()
                 .stream()
-                .sorted(Comparator.comparing(
-                        item -> item.getBook().getId()))
+                .sorted(Comparator.comparing(item -> item.getBook().getId()))
                 .toList();
 
+        Map<Long, Book> reservedBooks = new LinkedHashMap<>();
         for (CartItem item : items) {
-            reserveCartItem(order, item);
+            Book book = findBookForReservation(item.getBook().getId());
+            validateAvailableStock(book, item.getQuantity());
+            book.updateStock(book.getStockQuantity() - item.getQuantity());
+            reservedBooks.put(book.getId(), book);
         }
-    }
-
-    private void reserveCartItem(Order order, CartItem item) {
-
-        Book book = findBookForReservation(item.getBook().getId());
-
-        validateAvailableStock(book, item.getQuantity());
-
-        book.updateStock(
-                book.getStockQuantity() - item.getQuantity()
-        );
-
-        order.addItem(book, item.getQuantity());
+        return reservedBooks;
     }
 
     private Book findBookForReservation(Long bookId) {

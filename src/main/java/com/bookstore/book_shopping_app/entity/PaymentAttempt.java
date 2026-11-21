@@ -22,15 +22,21 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "payment_attempts", uniqueConstraints = {
         @UniqueConstraint(name = "uk_payment_attempt_intent", columnNames = "payment_intent_id")
 })
 @Getter
+@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class PaymentAttempt {
 
     @Id
@@ -50,6 +56,8 @@ public class PaymentAttempt {
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Builder.Default
+    @Setter
     private PaymentStatus status = PaymentStatus.INITIATED;
 
     @NotNull
@@ -70,9 +78,11 @@ public class PaymentAttempt {
     private String clientToken;
 
     @Column(name = "gateway_reference", length = 150)
+    @Setter
     private String gatewayReference;
 
     @Column(name = "failure_reason", length = 500)
+    @Setter
     private String failureReason;
 
     @NotNull
@@ -85,94 +95,6 @@ public class PaymentAttempt {
 
     @NotNull
     @Column(name = "updated_at", nullable = false)
+    @Setter
     private LocalDateTime updatedAt;
-
-    public PaymentAttempt(Order order, PaymentMethod provider, BigDecimal amount,
-                          String currency, String paymentIntentId, String clientToken,
-                          LocalDateTime expiresAt) {
-        if (order == null || provider == null || amount == null || amount.signum() <= 0
-                || currency == null || currency.isBlank()
-                || paymentIntentId == null || paymentIntentId.isBlank()
-                || clientToken == null || clientToken.isBlank() || expiresAt == null) {
-            throw new IllegalArgumentException("Valid order, provider, amount, currency, intent, token and expiry are required");
-        }
-        this.order = order;
-        this.provider = provider;
-        this.amount = amount;
-        this.currency = currency.trim().toUpperCase();
-        this.paymentIntentId = paymentIntentId;
-        this.clientToken = clientToken;
-        this.expiresAt = expiresAt;
-        this.status = PaymentStatus.INITIATED;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = this.createdAt;
-    }
-
-    public void markPending() {
-        requireStatus(PaymentStatus.INITIATED);
-        this.status = PaymentStatus.PENDING;
-        touch();
-    }
-
-    public void markSucceeded(String gatewayReference) {
-        if (gatewayReference == null || gatewayReference.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Gateway reference is required for successful payment"
-            );
-        }
-
-        if (status == PaymentStatus.SUCCEEDED) {
-            return;
-        }
-
-        requireStatus(
-                PaymentStatus.PENDING,
-                PaymentStatus.INITIATED,
-                PaymentStatus.EXPIRED
-        );
-
-        this.gatewayReference = gatewayReference;
-        this.failureReason = null;
-        this.status = PaymentStatus.SUCCEEDED;
-        touch();
-    }
-
-    public void markFailed(String reason) {
-        if (status == PaymentStatus.FAILED) {
-            return;
-        }
-        requireStatus(PaymentStatus.PENDING, PaymentStatus.INITIATED);
-        this.failureReason = normalizeReason(reason);
-        this.status = PaymentStatus.FAILED;
-        touch();
-    }
-
-    public void markExpired() {
-        if (status == PaymentStatus.EXPIRED) {
-            return;
-        }
-        requireStatus(PaymentStatus.PENDING, PaymentStatus.INITIATED);
-        this.status = PaymentStatus.EXPIRED;
-        touch();
-    }
-
-    private void requireStatus(PaymentStatus... allowedStatuses) {
-        for (PaymentStatus allowedStatus : allowedStatuses) {
-            if (status == allowedStatus) {
-                return;
-            }
-        }
-        throw new IllegalStateException("Payment attempt cannot transition from status: " + status);
-    }
-
-    private String normalizeReason(String reason) {
-        if (reason == null || reason.isBlank()) {
-            return "Payment failed";
-        }
-        return reason.length() > 500 ? reason.substring(0, 500) : reason;
-    }
-
-    private void touch() {
-        this.updatedAt = LocalDateTime.now();
-    }
 }

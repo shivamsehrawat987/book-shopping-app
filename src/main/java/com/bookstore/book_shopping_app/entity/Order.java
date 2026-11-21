@@ -3,10 +3,10 @@ package com.bookstore.book_shopping_app.entity;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import com.bookstore.book_shopping_app.enums.OrderStatus;
 
@@ -29,15 +29,21 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "orders", uniqueConstraints = {
-    @UniqueConstraint(name = "uk_order_user_checkout", columnNames = {"user_id", "checkout_key"})
+        @UniqueConstraint(name = "uk_order_user_checkout", columnNames = {"user_id", "checkout_key"})
 })
 @Getter
+@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class Order {
 
     @Id
@@ -52,11 +58,14 @@ public class Order {
     @NotNull
     @DecimalMin(value = "0.0", inclusive = true)
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
+    @Builder.Default
+    @Setter(AccessLevel.NONE)
     private OrderStatus status = OrderStatus.PENDING;
 
     @NotBlank
@@ -65,8 +74,12 @@ public class Order {
     private String shippingAddress;
 
     @CreationTimestamp
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     @Column(name = "cart_id")
     private Long cartId;
@@ -83,46 +96,31 @@ public class Order {
     private String currency;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
-    public Order(User user, String shippingAddress) {
-        if (user == null || shippingAddress == null || shippingAddress.isBlank()) {
-            throw new IllegalArgumentException("User and shipping address are required");
+    /** Marks an order paid only while its stock reservation is still active. */
+    public void markPaid() {
+        if (this.status != OrderStatus.PENDING) {
+            throw new IllegalStateException("Only pending orders can be marked as paid");
         }
-        this.user = user;
-        this.shippingAddress = shippingAddress;
+        this.status = OrderStatus.PAID;
     }
 
-    public List<OrderItem> getItems() {
-        return Collections.unmodifiableList(items);
-    }
-
-    public OrderItem addItem(Book book, Integer quantity) {
-        OrderItem item = new OrderItem(this, book, quantity);
-        items.add(item);
-        totalAmount = totalAmount.add(item.getPriceAtPurchase().multiply(BigDecimal.valueOf(quantity)));
-        return item;
-    }
-
-    public void updateStatus(OrderStatus status) {
-        if (status == null) {
-            throw new IllegalArgumentException("Order status is required");
+    /** Expires a pending order after its reserved stock has been restored. */
+    public void expire() {
+        if (this.status != OrderStatus.PENDING) {
+            throw new IllegalStateException("Only pending orders can be expired");
         }
-        this.status = status;
+        this.status = OrderStatus.EXPIRED;
     }
 
-    public void prepareCheckout(Long cartId, String checkoutKey, LocalDateTime expiresAt) {
-        this.cartId = cartId;
-        this.checkoutKey = checkoutKey;
-        this.expiresAt = expiresAt;
-        this.currency = "INR";
-    }
-
-    public void attachPaymentIntent(String paymentIntentId) {
-        if (paymentIntentId == null || paymentIntentId.isBlank() || this.paymentIntentId != null) {
-            throw new IllegalStateException("A single valid payment intent is required");
+    /** Records that money was captured after the order's stock reservation expired. */
+    public void requireReconciliation() {
+        if (this.status != OrderStatus.EXPIRED) {
+            throw new IllegalStateException(
+                    "Only expired orders can require payment reconciliation");
         }
-        this.paymentIntentId = paymentIntentId;
+        this.status = OrderStatus.REQUIRES_RECONCILIATION;
     }
-
 }

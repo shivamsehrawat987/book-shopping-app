@@ -13,15 +13,21 @@ import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "cart_items", uniqueConstraints = {
         @UniqueConstraint(name = "uk_cart_items_cart_book", columnNames = {"cart_id", "book_id"})
 })
 @Getter
+@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class CartItem {
 
     @Id
@@ -42,24 +48,4 @@ public class CartItem {
     @Positive(message = "Quantity must be greater than zero")
     @Column(nullable = false)
     private Integer quantity;
-
-    CartItem(Cart cart, Book book, Integer quantity) {
-        this.cart = cart;
-        this.book = book;
-        if (quantity == null || quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero");
-        }
-        this.quantity = quantity;
-    }
-
-    public void updateQuantity(Integer quantity) {
-        if (quantity == null || quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero");
-        }
-        this.quantity = quantity;
-    }
-
-    void detachFromCart() {
-        this.cart = null;
-    }
 }

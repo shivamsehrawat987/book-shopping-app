@@ -1,7 +1,10 @@
 package com.bookstore.book_shopping_app.controller;
 
+import com.bookstore.book_shopping_app.constants.BookstoreMessageConstants;
 import com.bookstore.book_shopping_app.dto.request.InitiatePaymentRequest;
+import com.bookstore.book_shopping_app.dto.response.PaymentInitiationResponse;
 import com.bookstore.book_shopping_app.dto.response.PaymentResult;
+import com.bookstore.book_shopping_app.payment.MockPaymentEvent;
 import com.bookstore.book_shopping_app.payment.MockWebhookVerifier;
 import com.bookstore.book_shopping_app.service.PaymentService;
 
@@ -21,6 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
 
+import static com.bookstore.book_shopping_app.constants.BookstoreMessageConstants.CHECKOUT_COMPLETED_SUCCESSFULLY;
+
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
@@ -31,15 +36,24 @@ public class PaymentController {
 
     @PostMapping("/orders/{orderId}/initiate")
     @SecurityRequirement(name = "basicAuth")
-    public PaymentResult initiatePayment(
+    public PaymentInitiationResponse initiatePayment(
             Principal principal,
             @PathVariable Long orderId,
             @Valid @RequestBody InitiatePaymentRequest request
     ) {
-        return payments.initiatePayment(
+
+        PaymentResult result = payments.initiatePayment(
                 principal.getName(),
                 orderId,
                 request.provider()
+        );
+
+        return new PaymentInitiationResponse(
+                result.paymentIntentId(),
+                result.clientToken(),
+                result.provider(),
+                result.status(),
+                CHECKOUT_COMPLETED_SUCCESSFULLY
         );
     }
 
@@ -48,19 +62,29 @@ public class PaymentController {
             consumes = MediaType.APPLICATION_JSON_VALUE
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Mock payment event. The raw JSON is retained for HMAC signature verification.",
+            description = BookstoreMessageConstants.WEBHOOK_DESCRIPTION,
             required = true,
             content = @Content(
                     mediaType = MediaType.APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = com.bookstore.book_shopping_app.payment.MockPaymentEvent.class)
+                    schema = @Schema(
+                            implementation = MockPaymentEvent.class
+                    )
             )
     )
     public void webhook(
             @RequestBody String rawBody,
-            @RequestHeader("X-Mock-Timestamp") String timestamp,
-            @RequestHeader("X-Mock-Signature") String signature
+            @RequestHeader(
+                    value = BookstoreMessageConstants.MOCK_TIMESTAMP_HEADER,
+                    required = false
+            ) String timestamp,
+            @RequestHeader(
+                    value = BookstoreMessageConstants.MOCK_SIGNATURE_HEADER,
+                    required = false
+            ) String signature
     ) {
         var event = verifier.verify(rawBody, timestamp, signature);
         payments.processEvent(event);
     }
+
+
 }

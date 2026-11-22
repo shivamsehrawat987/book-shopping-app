@@ -12,9 +12,16 @@ import org.mapstruct.ReportingPolicy;
 public interface OrderMapper {
 
     @Mapping(target = "userId", source = "user.id")
+    @Mapping(
+            target = "estimatedDeliveryDate",
+            expression = "java(order.getCreatedAt().toLocalDate().plusDays(3))"
+    )
     OrderResponse toResponse(Order order);
 
     @Mapping(target = "bookId", source = "book.id")
-    @Mapping(target = "lineTotal", expression = "java(item.getPriceAtPurchase().multiply(java.math.BigDecimal.valueOf(item.getQuantity())))")
+    @Mapping(
+            target = "lineTotal",
+            expression = "java(item.getPriceAtPurchase().multiply(java.math.BigDecimal.valueOf(item.getQuantity())))"
+    )
     OrderItemResponse toResponse(OrderItem item);
 }

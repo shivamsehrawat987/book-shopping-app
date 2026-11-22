@@ -3,6 +3,8 @@ package com.bookstore.book_shopping_app.payment;
 
 import com.bookstore.book_shopping_app.exception.business.CommonException;
 import jakarta.validation.Validator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -16,39 +18,41 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.util.HexFormat;
 
+import static com.bookstore.book_shopping_app.constants.PaymentWebhookConstants.*;
+
 @Component
 public class MockWebhookVerifier {
 
-    private static final String HMAC_ALGORITHM = "HmacSHA256";
-    private static final long TIMESTAMP_TOLERANCE_SECONDS = 300;
+    private static final Logger log =
+            LoggerFactory.getLogger(MockWebhookVerifier.class);
 
     private final byte[] secret;
+    private final boolean signatureRequired;
     private final ObjectMapper json;
     private final Validator validator;
     private final Clock clock;
 
     public MockWebhookVerifier(
             @Value("${app.payment.mock.webhook-secret:}") String webhookSecret,
+            @Value("${app.payment.mock.signature-required:true}") boolean signatureRequired,
             ObjectMapper json,
             Validator validator,
             Clock clock
     ) {
+        this.signatureRequired = signatureRequired;
 
-        if (webhookSecret == null || webhookSecret.isBlank()) {
-            throw new IllegalStateException(
-                    "Configure app.payment.mock.webhook-secret before starting the application"
-            );
+        if (signatureRequired &&
+                (webhookSecret == null || webhookSecret.isBlank())) {
+            throw new IllegalStateException(WEBHOOK_SECRET_REQUIRED);
         }
 
-        this.secret = webhookSecret.getBytes(StandardCharsets.UTF_8);
+        this.secret = webhookSecret == null
+                ? new byte[0]
+                : webhookSecret.getBytes(StandardCharsets.UTF_8);
 
-        if (this.secret.length < 32) {
-            throw new IllegalStateException(
-                    "Mock webhook secret must be at least 32 bytes"
-            );
+        if (signatureRequired && this.secret.length < 32) {
+            throw new IllegalStateException(WEBHOOK_SECRET_TOO_SHORT);
         }
-
-
 
         this.json = json;
         this.validator = validator;
@@ -61,32 +65,60 @@ public class MockWebhookVerifier {
             String signature
     ) {
 
-        verifySignature(rawBody, timestamp, signature);
+        if (rawBody == null || rawBody.isBlank()) {
+            throw new CommonException(
+                    INVALID_WEBHOOK,
+                    INVALID_WEBHOOK_JSON
+            );
+        }
+
+        if (signatureRequired) {
+            verifySignature(rawBody, timestamp, signature);
+        }
 
         MockPaymentEvent event;
 
         try {
             event = json.readValue(rawBody, MockPaymentEvent.class);
         } catch (JacksonException exception) {
+            log.warn("Webhook JSON deserialization failed", exception);
+
             throw new CommonException(
-                    "INVALID_WEBHOOK",
-                    "Invalid webhook JSON"
+                    INVALID_WEBHOOK,
+                    INVALID_WEBHOOK_JSON
             );
         }
 
-        if (event == null || !validator.validate(event).isEmpty()) {
+        if (event == null) {
             throw new CommonException(
-                    "INVALID_WEBHOOK",
-                    "Invalid mock payment event"
+                    INVALID_WEBHOOK,
+                    WEBHOOK_EVENT_NULL
             );
         }
 
-        if (!"payment_intent.succeeded".equals(event.type())
-                && !"payment_intent.payment_failed".equals(event.type())) {
+        var violations = validator.validate(event);
+
+        if (!violations.isEmpty()) {
+            violations.forEach(violation ->
+                    log.warn(
+                            "Webhook validation failed: {} - {}",
+                            violation.getPropertyPath(),
+                            violation.getMessage()
+                    )
+            );
 
             throw new CommonException(
-                    "INVALID_WEBHOOK",
-                    "Unsupported simulated event type"
+                    INVALID_WEBHOOK,
+                    INVALID_MOCK_PAYMENT_EVENT
+            );
+        }
+
+        if (!EVENT_PAYMENT_SUCCEEDED.equals(event.type())
+                && !EVENT_PAYMENT_FAILED.equals(event.type())) {
+
+            throw new CommonException(
+                    INVALID_WEBHOOK,
+                    UNSUPPORTED_EVENT_TYPE
             );
         }
 
@@ -99,14 +131,21 @@ public class MockWebhookVerifier {
             String signature
     ) {
 
+        if (timestamp == null || timestamp.isBlank()
+                || signature == null || signature.isBlank()) {
+
+            throw new CommonException(
+                    INVALID_WEBHOOK,
+                    SIGNATURE_HEADERS_REQUIRED
+            );
+        }
+
         try {
             long signedAt = Long.parseLong(timestamp);
-
             long now = clock.instant().getEpochSecond();
 
             if (signedAt < now - TIMESTAMP_TOLERANCE_SECONDS
                     || signedAt > now + TIMESTAMP_TOLERANCE_SECONDS) {
-
                 throw new IllegalArgumentException("Expired signature");
             }
 
@@ -115,7 +154,7 @@ public class MockWebhookVerifier {
             mac.init(new SecretKeySpec(secret, HMAC_ALGORITHM));
 
             byte[] expected = mac.doFinal(
-                    (timestamp + "." + rawBody)
+                    (timestamp + SIGNATURE_SEPARATOR + rawBody)
                             .getBytes(StandardCharsets.UTF_8)
             );
 
@@ -126,14 +165,20 @@ public class MockWebhookVerifier {
             }
 
         } catch (IllegalArgumentException exception) {
+            log.warn("Webhook signature verification failed: {}",
+                    exception.getMessage());
+
             throw new CommonException(
-                    "INVALID_WEBHOOK",
-                    "Invalid or expired mock webhook signature"
+                    INVALID_WEBHOOK,
+                    INVALID_SIGNATURE
             );
 
         } catch (GeneralSecurityException exception) {
+            log.error("Webhook signature verification could not be performed",
+                    exception);
+
             throw new IllegalStateException(
-                    "Cannot verify webhook",
+                    VERIFICATION_FAILURE,
                     exception
             );
         }

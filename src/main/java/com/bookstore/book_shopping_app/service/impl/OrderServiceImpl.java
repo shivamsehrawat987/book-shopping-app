@@ -3,6 +3,7 @@ package com.bookstore.book_shopping_app.service.impl;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -32,6 +33,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static com.bookstore.book_shopping_app.constants.BookstoreMessageConstants.CHECKOUT_COMPLETED_SUCCESSFULLY;
 
 @Service
 @RequiredArgsConstructor
@@ -261,12 +264,18 @@ public class OrderServiceImpl implements OrderService {
 
     private CheckoutResponse response(Order order) {
 
+        LocalDate estimatedDeliveryDate =
+                order.getCreatedAt().toLocalDate().plusDays(3);
+
         return new CheckoutResponse(
                 order.getId(),
                 order.getTotalAmount(),
                 order.getCurrency(),
                 order.getExpiresAt(),
-                true
+                true,
+                estimatedDeliveryDate,
+                CHECKOUT_COMPLETED_SUCCESSFULLY
+
         );
     }
 

@@ -58,4 +58,6 @@ public final class BookstoreErrorConstants {
     public static final String BOOK_INACTIVE = "BOOK_INACTIVE";
     public static final String BOOK_VERSION_CONFLICT = "BOOK_VERSION_CONFLICT";
     public static final String INVALID_STOCK_ADJUSTMENT = "INVALID_STOCK_ADJUSTMENT";
+    public static final String AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED";
+    public static final String ACCESS_DENIED = "ACCESS_DENIED";
 }

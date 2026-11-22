@@ -21,15 +21,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     boolean existsByCartIdAndStatus(Long cartId, OrderStatus status);
 
-    @Query("select o.cartId from Order o where o.paymentIntentId = :intentId")
-    Optional<Long> findCartIdByPaymentIntentId(@Param("intentId") String intentId);
-
-    @Query("select o.cartId from Order o where o.id = :id")
-    Optional<Long> findCartIdByOrderId(@Param("id") Long id);
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    Optional<Order> findByPaymentIntentId(String paymentIntentId);
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Order> findLockedById(Long id);
 

@@ -115,6 +115,14 @@ public class Order {
         this.status = OrderStatus.EXPIRED;
     }
 
+    /** Cancels a pending order after its reserved stock has been restored. */
+    public void cancel() {
+        if (this.status != OrderStatus.PENDING) {
+            throw new IllegalStateException("Only pending orders can be cancelled");
+        }
+        this.status = OrderStatus.CANCELLED;
+    }
+
     /** Records that money was captured after the order's stock reservation expired. */
     public void requireReconciliation() {
         if (this.status != OrderStatus.EXPIRED) {

@@ -150,4 +150,25 @@ public final class BookstoreMessageConstants {
 
     public static final String INVALID_STOCK_ADJUSTMENT_MESSAGE =
             "The requested stock adjustment is invalid.";
+
+    public static final String AUTHENTICATION_REQUIRED_MESSAGE =
+            "Authentication is required to access this resource.";
+
+    public static final String ACCESS_DENIED_MESSAGE =
+            "You do not have permission to perform this operation. Admin access is required.";
+
+    public static final String CHECKOUT_COMPLETED_SUCCESSFULLY =
+     "Checkout completed successfully. Please complete your payment before the order expires.";
+    public static final String APPLICATION_JSON =
+            "application/json";
+
+    public static final String MOCK_TIMESTAMP_HEADER =
+            "X-Mock-Timestamp";
+
+    public static final String MOCK_SIGNATURE_HEADER =
+            "X-Mock-Signature";
+
+    public static final String WEBHOOK_DESCRIPTION =
+            "Mock payment event. In the dev profile, submit only this JSON body. "
+                    + "Other profiles require signed webhook headers.";
 }

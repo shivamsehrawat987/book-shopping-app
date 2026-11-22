@@ -11,6 +11,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class CheckoutConfig {
     @Bean
     Clock checkoutClock() {
-        return Clock.systemUTC();
+        return Clock.systemDefaultZone();
     }
 }

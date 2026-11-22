@@ -50,6 +50,23 @@ public class OrderExpirationService {
             return;
         }
 
+        restoreReservedStock(order);
+        expirePendingPaymentAttempts(order);
+        order.expire();
+    }
+
+    /** Cancels a pending order after a definitive payment failure and releases its reservation. */
+    public void cancelPendingOrder(Order order) {
+        if (order.getStatus() != OrderStatus.PENDING) {
+            return;
+        }
+
+        restoreReservedStock(order);
+        expirePendingPaymentAttempts(order);
+        order.cancel();
+    }
+
+    private void restoreReservedStock(Order order) {
         // Deterministic lock order prevents deadlocks for orders sharing multiple books.
         order.getItems().stream()
                 .sorted(Comparator.comparing(item -> item.getBook().getId()))
@@ -61,7 +78,9 @@ public class OrderExpirationService {
                     int restoredStock = Math.addExact(book.getStockQuantity(), item.getQuantity());
                     book.updateStock(restoredStock);
                 });
+    }
 
+    private void expirePendingPaymentAttempts(Order order) {
         paymentAttempts.findByOrder_IdOrderByCreatedAtDesc(order.getId())
                 .forEach(attempt -> {
                     if (attempt.getStatus() == PaymentStatus.INITIATED
@@ -69,7 +88,6 @@ public class OrderExpirationService {
                         paymentAttemptLifecycle.markExpired(attempt);
                     }
                 });
-
-        order.expire();
     }
+
 }

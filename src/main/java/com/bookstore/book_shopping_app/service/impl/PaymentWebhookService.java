@@ -11,6 +11,7 @@ import java.util.Locale;
 
 import com.bookstore.book_shopping_app.constants.BookstoreErrorConstants;
 import com.bookstore.book_shopping_app.constants.BookstoreMessageConstants;
+import com.bookstore.book_shopping_app.constants.PaymentWebhookConstants;
 import com.bookstore.book_shopping_app.entity.Order;
 import com.bookstore.book_shopping_app.entity.PaymentAttempt;
 import com.bookstore.book_shopping_app.entity.ProcessedPaymentEvent;
@@ -27,14 +28,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static com.bookstore.book_shopping_app.constants.PaymentWebhookConstants.*;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentWebhookService {
-
-    private static final String PAYMENT_SUCCEEDED_EVENT = "payment_intent.succeeded";
-    private static final String PAYMENT_FAILED_EVENT = "payment_intent.payment_failed";
-    private static final String PAYLOAD_SEPARATOR = "|";
 
     private final PaymentAttemptRepository paymentAttempts;
     private final ProcessedPaymentEventRepository processedEvents;
@@ -149,7 +148,8 @@ public class PaymentWebhookService {
             return;
         }
         paymentAttemptLifecycle.markFailed(attempt, event.failureReason());
-        log.warn("Payment attempt failed: orderId={}, paymentIntentId={}",
+        orderExpirationService.cancelPendingOrder(order);
+        log.warn("Payment failed; order cancelled and reserved stock restored: orderId={}, paymentIntentId={}",
                 order.getId(), attempt.getPaymentIntentId());
     }
 
